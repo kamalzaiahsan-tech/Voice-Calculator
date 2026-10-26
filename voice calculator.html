@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Calc — a calculator that shows its work</title>
+<style>
+:root{
+  --bg:#e8edf3;--panel:#f6f8fb;--ink:#132033;--muted:#5a6a7e;--key:#ffffff;--keyop:#dce5f0;--keyfn:#eef2f7;
+  --accent:#1f4fe0;--accent-ink:#ffffff;--line:#cfd8e3;--danger:#b3261e;
+  color-scheme:light;
+  box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#0d131a;--panel:#141c26;--ink:#e9eff6;--muted:#9aabbd;--key:#1c2733;--keyop:#26364a;--keyfn:#212d3b;
+    --accent:#7c9aff;--accent-ink:#0b1220;--line:#2a3747;--danger:#ff8a80;color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0d131a;--panel:#141c26;--ink:#e9eff6;--muted:#9aabbd;--key:#1c2733;--keyop:#26364a;--keyfn:#212d3b;
+  --accent:#7c9aff;--accent-ink:#0b1220;--line:#2a3747;--danger:#ff8a80;color-scheme:dark;
+}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+.app{max-width:900px;margin:0 auto;padding:20px 16px 32px;display:grid;gap:20px;grid-template-columns:minmax(0,1fr)}
+@media(min-width:780px){.app{grid-template-columns:minmax(340px,410px) minmax(0,1fr);align-items:start;padding-top:40px}}
+.calc{background:var(--panel);border:1px solid var(--line);border-radius:26px;padding:16px}
+.display{background:var(--bg);border-radius:18px;padding:12px 16px 14px;margin-bottom:14px}
+.topbar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px}
+.chip{font:inherit;font-size:13px;color:var(--muted);background:transparent;border:1px solid var(--line);border-radius:999px;padding:4px 12px;cursor:pointer}
+.chip[aria-pressed="true"],.chip[aria-expanded="true"]{color:var(--ink);border-color:var(--muted)}
+.chip.right{margin-left:auto}
+.chip.mic{color:var(--accent-ink);background:var(--accent);border-color:var(--accent);font-weight:600}
+.chip.mic[aria-pressed="true"]{outline:3px solid var(--accent);outline-offset:2px}
+.heard{min-height:18px;text-align:right;font-size:13px;color:var(--muted);font-style:italic;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.prev{min-height:20px;text-align:right;font-size:14px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#expr{width:100%;border:0;background:transparent;color:var(--ink);text-align:right;font:inherit;font-size:26px;padding:4px 0;outline:none;font-variant-numeric:tabular-nums}
+.res{display:block;text-align:right;font-size:52px;font-weight:700;line-height:1.1;letter-spacing:-.02em;font-variant-numeric:tabular-nums;overflow-wrap:anywhere;min-height:57px}
+.res.sm{font-size:36px}.res.xs{font-size:26px}
+.res.stale{color:var(--muted)}
+.msg{min-height:20px;text-align:right;font-size:13px;color:var(--danger)}
+.keys{display:grid;gap:10px}
+.keys.main{grid-template-columns:repeat(4,1fr)}
+.keys.sci{grid-template-columns:repeat(5,1fr);margin-bottom:10px}
+.keys[hidden]{display:none}
+.k{font:inherit;color:var(--ink);background:var(--key);border:1px solid var(--line);border-radius:14px;height:58px;font-size:22px;cursor:pointer;transition:transform .08s}
+.k:active{transform:scale(.96)}
+.k.fn{background:var(--keyfn)}
+.k.op{background:var(--keyop)}
+.k.eq{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:700}
+.sci .k{height:42px;font-size:15px;border-radius:12px}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+#expr:focus-visible{outline:none}
+.display:has(#expr:focus-visible){outline:3px solid var(--accent);outline-offset:2px}
+.history{background:var(--panel);border:1px solid var(--line);border-radius:22px;padding:16px;min-height:160px}
+.hhead{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.hhead h2{margin:0;font-size:17px}
+#hist{list-style:none;margin:0;padding:0;display:grid;gap:8px;max-height:560px;overflow:auto}
+#hist li{display:flex;gap:6px;align-items:stretch}
+.h-main{flex:1;min-width:0;text-align:right;font:inherit;color:var(--ink);background:var(--key);border:1px solid var(--line);border-radius:12px;padding:8px 12px;cursor:pointer}
+.h-main small{display:block;color:var(--muted);font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.h-main b{font-size:20px;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.h-use{font:inherit;font-size:13px;color:var(--muted);background:transparent;border:1px solid var(--line);border-radius:12px;padding:0 10px;cursor:pointer}
+.empty{color:var(--muted);font-size:14px;margin:0}
+.hint{color:var(--muted);font-size:13px;margin:12px 4px 0}
+@media (prefers-reduced-motion:reduce){.k{transition:none}.k:active{transform:none}}
+</style>
+</head>
+<body>
+<main class="app">
+  <section class="calc" aria-label="Calculator">
+    <div class="display">
+      <div class="topbar">
+        <button class="chip mic" id="mic" aria-pressed="false" title="Say a calculation, e.g. twelve times eight">Speak</button>
+        <button class="chip" id="deg" aria-pressed="true" title="Angle unit for trig functions">Deg</button>
+        <button class="chip" id="sciT" aria-expanded="true" aria-controls="sci">Scientific</button>
+        <button class="chip" id="speak" aria-pressed="true" title="Read voice answers out loud">Read aloud</button>
+        <button class="chip right" id="copy">Copy result</button>
+      </div>
+      <div class="heard" id="heard" aria-live="polite"></div>
+      <div class="prev" id="prev"></div>
+      <input id="expr" type="text" inputmode="none" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="Expression" placeholder="Type or tap an expression">
+      <output class="res" id="res" for="expr">0</output>
+      <div class="msg" id="msg" role="status"></div>
+    </div>
+    <div class="keys sci" id="sci"></div>
+    <div class="keys main" id="main"></div>
+    <p class="hint">Tap Speak and say “twelve times eight”, “square root of one hundred forty four” or “sixty plus fifteen percent”. Then keep going with “times two”. Say “clear” to reset. Keyboard works too: Enter evaluates, Esc clears.</p>
+  </section>
+  <aside class="history" aria-label="History">
+    <div class="hhead"><h2>History</h2><button class="chip" id="clearH">Clear history</button></div>
+    <ul id="hist"></ul>
+  </aside>
+</main>
+<script>
+(function(){
+'use strict';
+var inp=document.getElementById('expr'),resEl=document.getElementById('res'),prevEl=document.getElementById('prev'),
+    msgEl=document.getElementById('msg'),histEl=document.getElementById('hist');
+var deg=true,ans=0,cur=0,justEval=false,history=[];
+try{history=JSON.parse(localStorage.getItem('calc.history')||'[]');if(!Array.isArray(history))history=[]}catch(e){history=[]}
+function save(){try{localStorage.setItem('calc.history',JSON.stringify(history))}catch(e){}}
+
+/* ---------- parser (no eval) ---------- */
+function CalcError(code){this.code=code}
+var MSG={syntax:'Check the expression.',div0:'Can’t divide by zero.',domain:'That input isn’t valid for this function.',range:'The result is out of range.'};
+function norm(s){return s.replace(/×/g,'*').replace(/÷/g,'/').replace(/[−–]/g,'-').replace(/π/g,'pi').replace(/√/g,'sqrt').replace(/\s+/g,'').toLowerCase()}
+function tokenize(s){
+  var t=[],i=0,c,j,n;
+  while(i<s.length){
+    c=s[i];
+    if(/[0-9.]/.test(c)){
+      j=i;while(j<s.length&&/[0-9.]/.test(s[j]))j++;
+      n=s.slice(i,j);
+      if(n==='.'||(n.match(/\./g)||[]).length>1)throw new CalcError('syntax');
+      t.push({k:'n',v:parseFloat(n)});i=j;
+    }else if(/[a-z]/.test(c)){
+      j=i;while(j<s.length&&/[a-z]/.test(s[j]))j++;
+      t.push({k:'id',v:s.slice(i,j)});i=j;
+    }else if('+-*/^()!%'.indexOf(c)>-1){t.push({k:'op',v:c});i++}
+    else throw new CalcError('syntax');
+  }
+  return t;
+}
+function fact(n){
+  if(!Number.isInteger(n)||n<0||n>170)throw new CalcError('domain');
+  var r=1;for(var i=2;i<=n;i++)r*=i;return r;
+}
+function evaluate(src){
+  var t=tokenize(norm(src)),p=0,D=deg;
+  function isOp(v){return t[p]&&t[p].k==='op'&&t[p].v===v}
+  function trig(f,tanCheck){return function(x){
+    if(tanCheck&&D&&Math.abs((((x%180)+180)%180)-90)<1e-9)throw new CalcError('domain');
+    var r=f(D?x*Math.PI/180:x);return Math.abs(r)<1e-15?0:r;
+  }}
+  function inv(f){return function(x){var r=f(x);return D?r*180/Math.PI:r}}
+  var FN={sin:trig(Math.sin),cos:trig(Math.cos),tan:trig(Math.tan,true),asin:inv(Math.asin),acos:inv(Math.acos),atan:inv(Math.atan),
+          ln:Math.log,log:Math.log10,sqrt:Math.sqrt,cbrt:Math.cbrt,abs:Math.abs,exp:Math.exp};
+  var CONST={pi:Math.PI,e:Math.E,ans:ans};
+  var has=function(o,k){return Object.prototype.hasOwnProperty.call(o,k)};
+  function startsOperand(){var x=t[p];return !!x&&(x.k==='n'||x.k==='id'||(x.k==='op'&&x.v==='('))}
+  function expr(){
+    var l=term(),o,r,rv;
+    while(isOp('+')||isOp('-')){
+      o=t[p++].v;r=term();rv=r.pct?l.v*r.v:r.v;
+      l={v:o==='+'?l.v+rv:l.v-rv};
+    }
+    return l;
+  }
+  function term(){
+    var l=unary(),o,r;
+    for(;;){
+      if(isOp('*')||isOp('/')){
+        o=t[p++].v;r=unary();
+        if(o==='/'){if(r.v===0)throw new CalcError('div0');l={v:l.v/r.v}}else l={v:l.v*r.v};
+      }else if(startsOperand()){r=unary();l={v:l.v*r.v}}
+      else break;
+    }
+    return l;
+  }
+  function unary(){
+    if(isOp('-')){p++;return {v:-unary().v}}
+    if(isOp('+')){p++;return unary()}
+    return power();
+  }
+  function power(){
+    var b=postfix();
+    if(isOp('^')){p++;var e=unary();return {v:Math.pow(b.v,e.v)}}
+    return b;
+  }
+  function postfix(){
+    var v=primary(),pct=false,o;
+    while(isOp('!')||isOp('%')){
+      o=t[p++].v;
+      if(o==='!'){v=fact(v);pct=false}else{v=v/100;pct=true}
+    }
+    return {v:v,pct:pct};
+  }
+  function primary(){
+    var x=t[p++],a;
+    if(!x)throw new CalcError('syntax');
+    if(x.k==='n')return x.v;
+    if(x.k==='id'){
+      if(has(FN,x.v)){
+        if(!isOp('('))throw new CalcError('syntax');
+        p++;a=expr().v;
+        if(!isOp(')'))throw new CalcError('syntax');
+        p++;return FN[x.v](a);
+      }
+      if(has(CONST,x.v))return CONST[x.v];
+      throw new CalcError('syntax');
+    }
+    if(x.v==='('){
+      a=expr().v;
+      if(!isOp(')'))throw new CalcError('syntax');
+      p++;return a;
+    }
+    throw new CalcError('syntax');
+  }
+  var r=expr();
+  if(p<t.length)throw new CalcError('syntax');
+  if(Number.isNaN(r.v))throw new CalcError('domain');
+  if(!isFinite(r.v))throw new CalcError('range');
+  return r.v;
+}
+function closeParens(v){
+  var open=(v.match(/\(/g)||[]).length-(v.match(/\)/g)||[]).length;
+  return v+(open>0?new Array(open+1).join(')'):'');
+}
+
+/* ---------- formatting ---------- */
+function clean(v){return Number(v.toPrecision(12))}
+function fmt(v){
+  v=clean(v);if(v===0)return '0';
+  var a=Math.abs(v);
+  if(a>=1e15||a<1e-7)return v.toExponential();
+  return v.toLocaleString('en-US',{maximumFractionDigits:10});
+}
+function raw(v){
+  v=clean(v);var a=Math.abs(v);
+  if(v!==0&&(a>=1e15||a<1e-7))return v.toExponential().replace(/e\+?(-?\d+)/,'×10^($1)');
+  return String(v);
+}
+function setRes(text,stale){
+  resEl.textContent=text;
+  resEl.className='res'+(text.length>18?' xs':text.length>12?' sm':'')+(stale?' stale':'');
+}
+
+/* ---------- UI ---------- */
+function msg(s){msgEl.textContent=s||''}
+function preview(){
+  var v=inp.value.trim();
+  if(!v){setRes('0',false);return}
+  try{cur=evaluate(closeParens(v));setRes(fmt(cur),false)}
+  catch(e){resEl.classList.add('stale')}
+}
+function insert(txt){
+  if(justEval){
+    if(/^[0-9.(a-zπ√]/i.test(txt))inp.value='';
+    justEval=false;prevEl.textContent='';
+  }
+  var s=inp.selectionStart==null?inp.value.length:inp.selectionStart,
+      e=inp.selectionEnd==null?s:inp.selectionEnd;
+  inp.value=inp.value.slice(0,s)+txt+inp.value.slice(e);
+  var c=s+txt.length;inp.setSelectionRange(c,c);inp.focus({preventScroll:true});
+  msg('');preview();
+}
+function backspace(){
+  justEval=false;
+  var s=inp.selectionStart==null?inp.value.length:inp.selectionStart,e=inp.selectionEnd==null?s:inp.selectionEnd,left,v=inp.value;
+  if(s!==e){inp.value=v.slice(0,s)+v.slice(e)}
+  else{
+    left=v.slice(0,s);
+    var m=left.match(/(asin|acos|atan|sin|cos|tan|ln|log|sqrt|√)\($/);
+    var cut=m?m[0].length:1;
+    s=Math.max(0,s-cut);
+    inp.value=v.slice(0,s)+v.slice(s+cut);
+  }
+  inp.setSelectionRange(s,s);inp.focus({preventScroll:true});msg('');preview();
+}
+function clearAll(){inp.value='';justEval=false;prevEl.textContent='';msg('');setRes('0',false);inp.focus({preventScroll:true})}
+function paren(){
+  var s=inp.selectionStart==null?inp.value.length:inp.selectionStart,left=inp.value.slice(0,s);
+  var open=(inp.value.match(/\(/g)||[]).length-(inp.value.match(/\)/g)||[]).length;
+  insert(open>0&&/[0-9.)πe!%]$/.test(left)?')':'(');
+}
+function equals(){
+  var v=inp.value.trim();if(!v)return;
+  try{
+    var r=evaluate(closeParens(v));
+    ans=r;cur=r;
+    history.unshift({e:v,r:fmt(r),raw:raw(r)});history=history.slice(0,40);save();renderHist();
+    prevEl.textContent=v+' =';inp.value=raw(r);justEval=true;msg('');setRes(fmt(r),false);
+  }catch(e){msg(MSG[e&&e.code]||MSG.syntax)}
+}
+function renderHist(){
+  histEl.textContent='';
+  if(!history.length){var li=document.createElement('li'),p=document.createElement('p');p.className='empty';p.textContent='Your calculations will show up here.';li.appendChild(p);histEl.appendChild(li);return}
+  history.forEach(function(h){
+    var li=document.createElement('li'),b=document.createElement('button'),u=document.createElement('button'),s=document.createElement('small'),r=document.createElement('b');
+    b.className='h-main';b.type='button';s.textContent=h.e;r.textContent='= '+h.r;b.appendChild(s);b.appendChild(r);
+    b.setAttribute('aria-label','Reuse expression '+h.e);
+    b.onclick=function(){justEval=false;prevEl.textContent='';inp.value=h.e;inp.focus({preventScroll:true});preview()};
+    u.className='h-use';u.type='button';u.textContent='Use result';u.onclick=function(){insert(h.raw)};
+    li.appendChild(b);li.appendChild(u);histEl.appendChild(li);
+  });
+}
+
+/* ---------- keys ---------- */
+var MAIN=[
+ ['AC','a:clear','fn','All clear'],['( )','a:paren','fn','Parentheses'],['%','i:%','fn','Percent'],['÷','i:÷','op','Divide'],
+ ['7','i:7'],['8','i:8'],['9','i:9'],['×','i:×','op','Multiply'],
+ ['4','i:4'],['5','i:5'],['6','i:6'],['−','i:−','op','Minus'],
+ ['1','i:1'],['2','i:2'],['3','i:3'],['+','i:+','op','Plus'],
+ ['0','i:0'],['.','i:.'],['⌫','a:back','fn','Backspace'],['=','a:eq','eq','Equals']
+];
+var SCI=[
+ ['sin','i:sin('],['cos','i:cos('],['tan','i:tan('],['π','i:π','','Pi'],['e','i:e','','Euler’s number'],
+ ['sin⁻¹','i:asin(','','Inverse sine'],['cos⁻¹','i:acos(','','Inverse cosine'],['tan⁻¹','i:atan(','','Inverse tangent'],['n!','i:!','','Factorial'],['Ans','i:ans','','Previous answer'],
+ ['ln','i:ln('],['log','i:log(','','Log base 10'],['√','i:√(','','Square root'],['x²','i:^2','','Square'],['xʸ','i:^','','Power']
+];
+function build(host,defs){
+  defs.forEach(function(d){
+    var b=document.createElement('button');
+    b.type='button';b.className='k '+(d[2]||'');b.textContent=d[0];
+    if(d[3])b.setAttribute('aria-label',d[3]);
+    b.addEventListener('mousedown',function(ev){ev.preventDefault()});
+    b.addEventListener('click',function(){
+      var kind=d[1].slice(0,1),val=d[1].slice(2);
+      if(kind==='i')insert(val);
+      else if(val==='clear')clearAll();
+      else if(val==='back')backspace();
+      else if(val==='paren')paren();
+      else if(val==='eq')equals();
+    });
+    host.appendChild(b);
+  });
+}
+build(document.getElementById('main'),MAIN);
+build(document.getElementById('sci'),SCI);
+
+/* ---------- controls ---------- */
+var degB=document.getElementById('deg'),sciB=document.getElementById('sciT'),sciP=document.getElementById('sci'),copyB=document.getElementById('copy');
+function setDeg(v){deg=v;degB.textContent=deg?'Deg':'Rad';degB.setAttribute('aria-pressed',String(deg));preview()}
+degB.onclick=function(){setDeg(!deg)};
+sciB.onclick=function(){var open=sciP.hidden;sciP.hidden=!open;sciB.setAttribute('aria-expanded',String(open))};
+copyB.onclick=function(){
+  var text=String(clean(cur));
+  try{
+    navigator.clipboard.writeText(text).then(function(){copyB.textContent='Copied';setTimeout(function(){copyB.textContent='Copy result'},1200)},function(){msg('Copy isn’t available in this view.')});
+  }catch(e){msg('Copy isn’t available in this view.')}
+};
+document.getElementById('clearH').onclick=function(){history=[];save();renderHist()};
+
+inp.addEventListener('input',function(){justEval=false;prevEl.textContent='';msg('');preview()});
+inp.addEventListener('keydown',function(ev){
+  if(ev.key==='Enter'){ev.preventDefault();equals();return}
+  if(ev.key==='Escape'){ev.preventDefault();clearAll();return}
+  if(justEval&&ev.key.length===1&&!ev.ctrlKey&&!ev.metaKey&&/[0-9.(a-z]/i.test(ev.key)){inp.value='';justEval=false;prevEl.textContent=''}
+});
+document.addEventListener('keydown',function(ev){
+  if(ev.target===document.body&&!ev.ctrlKey&&!ev.metaKey&&!ev.altKey&&ev.key.length===1)inp.focus();
+});
+/* ---------- voice ---------- */
+var micB=document.getElementById('mic'),speakB=document.getElementById('speak'),heardEl=document.getElementById('heard');
+var SR=window.SpeechRecognition||window.webkitSpeechRecognition,rec=null,listening=false,speakOn=true;
+var own=function(o,k){return Object.prototype.hasOwnProperty.call(o,k)};
+var UNITS={zero:0,one:1,two:2,three:3,four:4,five:5,six:6,seven:7,eight:8,nine:9,ten:10,eleven:11,twelve:12,thirteen:13,fourteen:14,fifteen:15,sixteen:16,seventeen:17,eighteen:18,nineteen:19};
+var TENS={twenty:20,thirty:30,forty:40,fourty:40,fifty:50,sixty:60,seventy:70,eighty:80,ninety:90};
+var BIG={thousand:1e3,million:1e6,billion:1e9};
+var PH=[
+ [/\b(?:open|left) (?:brackets?|parenthesis|parentheses|parens?)\b/g,' ( '],
+ [/\b(?:close|right) (?:brackets?|parenthesis|parentheses|parens?)\b/g,' ) '],
+ [/[()]/g,' $& '],
+ [/\b(?:square root(?: of)?|root of)\b/g,' √( '],
+ [/\bcube root(?: of)?\b/g,' cbrt( '],
+ [/\babsolute(?: value)?(?: of)?\b/g,' abs( '],
+ [/\b(?:arc ?sine|inverse sine)(?: of)?\b/g,' asin( '],
+ [/\b(?:arc ?cosine|inverse cosine)(?: of)?\b/g,' acos( '],
+ [/\b(?:arc ?tangent|inverse tangent)(?: of)?\b/g,' atan( '],
+ [/\b(?:sine|sin)(?: of)?\b/g,' sin( '],
+ [/\b(?:cosine|cos)(?: of)?\b/g,' cos( '],
+ [/\b(?:tangent|tan)(?: of)?\b/g,' tan( '],
+ [/\b(?:natural log(?:arithm)?|ln)(?: of)?\b/g,' ln( '],
+ [/\blog(?:arithm)?(?: of)?\b/g,' log( '],
+ [/\b(?:to the power(?: of)?|raised to(?: the power of)?|power of)\b/g,' ^ '],
+ [/\bsquared\b/g,' ^ 2 '],
+ [/\bcubed\b/g,' ^ 3 '],
+ [/\b(?:multiplied by|multiply by|multiply|times|into)\b|\*/g,' × '],
+ [/\b(?:divided by|divide by|divide|over)\b|\//g,' ÷ '],
+ [/\b(?:plus|add)\b|\+/g,' + '],
+ [/\b(?:negative|negate)\b/g,' neg '],
+ [/\b(?:minus|subtract|less)\b|[-−–]/g,' − '],
+ [/\b(?:percent|per cent)\b|%/g,' % '],
+ [/\bfactorial\b|!/g,' ! '],
+ [/\bpie\b|\bpi\b|π/g,' π '],
+ [/\b(?:answer|previous|ans)\b/g,' ans '],
+ [/=/g,' '],
+ [/\b(?:what's|what is|what|how much is|calculate|compute|please|the|equals?|is|result|of|by|and|then|a|an|to|me|degrees?)\b/g,' ']
+];
+function isDigitWord(w){return (own(UNITS,w)&&UNITS[w]<10)||/^\d$/.test(w)}
+function digitOf(w){return /^\d$/.test(w)?w:String(UNITS[w])}
+function consumeNum(tk,i){
+  var total=0,cur=0,seen=false,last='',w,u,d,str;
+  for(;i<tk.length;i++){
+    w=tk[i];
+    if(own(UNITS,w)){u=UNITS[w];if(last==='u'||(last==='t'&&u>=10))break;cur+=u;last='u';seen=true}
+    else if(own(TENS,w)){if(last==='u'||last==='t')break;cur+=TENS[w];last='t';seen=true}
+    else if(w==='hundred'){cur=(cur||1)*100;last='h';seen=true}
+    else if(own(BIG,w)){total+=(cur||1)*BIG[w];cur=0;last='b';seen=true}
+    else break;
+  }
+  str=seen?String(total+cur):'0';
+  if(tk[i]==='point'&&i+1<tk.length&&isDigitWord(tk[i+1])){
+    d='';i++;
+    while(i<tk.length&&isDigitWord(tk[i])){d+=digitOf(tk[i]);i++}
+    str+='.'+d;
+  }
+  return [str,i];
+}
+function voiceToExpr(text){
+  var s=' '+text.toLowerCase().replace(/([a-z])-([a-z])/g,'$1 $2').replace(/(\d),(?=\d{3}\b)/g,'$1')+' ';
+  PH.forEach(function(p){s=s.replace(p[0],p[1])});
+  s=s.replace(/[×÷^!%+−π]/g,' $& ');
+  var tk=s.trim().split(/\s+/).filter(Boolean),out='',i=0,closeNext=false,unknown=[],negFirst=false,w,r;
+  function operand(x){out+=x;if(closeNext){out+=')';closeNext=false}}
+  while(i<tk.length){
+    w=tk[i];
+    if(/^\d+(?:\.\d+)?$/.test(w)){operand(w);i++}
+    else if(own(UNITS,w)||own(TENS,w)||w==='hundred'||own(BIG,w)||(w==='point'&&i+1<tk.length&&isDigitWord(tk[i+1]))){r=consumeNum(tk,i);operand(r[0]);i=r[1]}
+    else if(w==='neg'){if(!out)negFirst=true;out+='−';i++}
+    else if(w==='x'){out+='×';i++}
+    else if(w==='π'||w==='ans'){operand(w);i++}
+    else if(w==='('){if(closeNext)closeNext=false;else out+='(';i++}
+    else if(/^[+−×÷^%!)]$/.test(w)){out+=w;i++}
+    else if(/^[a-z√]+\($/.test(w)){out+=w;closeNext=true;i++}
+    else{unknown.push(w);i++}
+  }
+  return {expr:out,unknown:unknown,negFirst:negFirst};
+}
+function spoken(v){
+  return fmt(v).replace(/,/g,'').replace(/^-/,'minus ').replace(/\./,' point ').replace(/e\+?(-?\d+)/,' times ten to the $1');
+}
+function say(text){
+  if(!speakOn||!text)return;
+  try{if(window.speechSynthesis){speechSynthesis.cancel();var u=new SpeechSynthesisUtterance(text);u.lang='en-US';speechSynthesis.speak(u)}}catch(e){}
+}
+function runCommand(t){
+  if(/^(?:all )?clear(?: all| everything| it)?$|^reset$|^start over$|^clean$/.test(t)){clearAll();say('Cleared');return true}
+  if(/^(?:clear|delete|erase) history$/.test(t)){history=[];save();renderHist();say('History cleared');return true}
+  if(/^(?:delete|backspace|undo|go back|remove last|erase)(?: that| last)?$/.test(t)){backspace();return true}
+  if(/^(?:use |switch to |set )?(?:degrees?|degree mode)$/.test(t)){setDeg(true);say('Degrees');return true}
+  if(/^(?:use |switch to |set )?(?:radians?|radian mode)$/.test(t)){setDeg(false);say('Radians');return true}
+  if(/^(?:show|open) (?:the )?scientific(?: panel| mode| keys)?$/.test(t)){sciP.hidden=false;sciB.setAttribute('aria-expanded','true');return true}
+  if(/^(?:hide|close) (?:the )?scientific(?: panel| mode| keys)?$/.test(t)){sciP.hidden=true;sciB.setAttribute('aria-expanded','false');return true}
+  if(/^copy(?: the)?(?: result| answer)?$/.test(t)){copyB.click();return true}
+  if(/^(?:equals?|calculate|compute|what is the (?:result|answer)|what's the (?:result|answer)|result|answer)$/.test(t)){equals();say(msgEl.textContent||spoken(cur));return true}
+  if(/^(?:read|say|speak) (?:the )?(?:result|answer)(?: again)?$|^repeat(?: that)?$/.test(t)){var was=speakOn;speakOn=true;say(spoken(cur));speakOn=was;return true}
+  if(/^(?:stop|mute) (?:reading|speaking|talking)$|^be quiet$|^mute$/.test(t)){speakOn=false;speakB.setAttribute('aria-pressed','false');try{speechSynthesis.cancel()}catch(e){}return true}
+  if(/^(?:start|enable|turn on) (?:reading|speaking)$|^unmute$/.test(t)){speakOn=true;speakB.setAttribute('aria-pressed','true');say('Reading answers aloud');return true}
+  return false;
+}
+function handleVoice(raw){
+  var t=raw.toLowerCase().replace(/[.,!?]+$/,'').trim();
+  heardEl.textContent='Heard: “'+raw+'”';
+  if(runCommand(t))return;
+  var r=voiceToExpr(t);
+  if(r.unknown.length){msg('Couldn’t read “'+r.unknown.join(' ')+'” as math. Try “twelve times eight”.');return}
+  if(!r.expr){msg('I didn’t catch a calculation. Try “twelve times eight”.');return}
+  var continues=!r.negFirst&&/^[+−×÷^%!]/.test(r.expr);
+  if(!continues){inp.value='';justEval=false;prevEl.textContent=''}
+  inp.setSelectionRange(inp.value.length,inp.value.length);
+  insert(r.expr);equals();
+  say(msgEl.textContent||spoken(cur));
+}
+var VOICE_ERR={
+  'not-allowed':'Microphone access is blocked. Allow it for this page, or open the calculator in its own tab if it’s embedded.',
+  'service-not-allowed':'Microphone access is blocked. Allow it for this page, or open the calculator in its own tab if it’s embedded.',
+  'no-speech':'Didn’t hear anything. Tap Speak and try again.',
+  'audio-capture':'No microphone was found.',
+  'network':'The speech service couldn’t be reached. Check your connection.'
+};
+function startVoice(){
+  if(!SR){msg('Voice input isn’t supported in this browser. Try Chrome, Edge or Safari.');return}
+  if(listening){try{rec.stop()}catch(e){}return}
+  try{if(window.speechSynthesis)speechSynthesis.cancel()}catch(e){}
+  var finalText='';
+  rec=new SR();
+  rec.lang=/^en/i.test(navigator.language||'')?navigator.language:'en-US';
+  rec.interimResults=true;rec.continuous=false;
+  rec.onstart=function(){listening=true;micB.setAttribute('aria-pressed','true');micB.textContent='Listening… tap to stop';msg('');heardEl.textContent=''};
+  rec.onresult=function(ev){
+    var t='',fin=false,i;
+    for(i=0;i<ev.results.length;i++){t+=ev.results[i][0].transcript;fin=ev.results[i].isFinal}
+    heardEl.textContent='Heard: “'+t.trim()+'”';
+    if(fin)finalText=t.trim();
+  };
+  rec.onerror=function(ev){if(ev.error!=='aborted')msg(VOICE_ERR[ev.error]||'Voice input stopped ('+ev.error+').')};
+  rec.onend=function(){listening=false;micB.setAttribute('aria-pressed','false');micB.textContent='Speak';if(finalText)handleVoice(finalText)};
+  try{rec.start()}catch(e){msg('Couldn’t start the microphone. Try again.')}
+}
+micB.onclick=startVoice;
+speakB.onclick=function(){speakOn=!speakOn;speakB.setAttribute('aria-pressed',String(speakOn));if(!speakOn){try{speechSynthesis.cancel()}catch(e){}}};
+
+renderHist();
+})();
+</script>
+</body>
+</html>
